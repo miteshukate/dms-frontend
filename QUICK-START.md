@@ -4,7 +4,7 @@
 
 ### Step 1: Start the Development Server
 ```bash
-cd /Users/mukate/WebstormProjects/vdr-frontend
+cd /Users/mukate/WebstormProjects/dms-frontend
 pnpm dev
 ```
 

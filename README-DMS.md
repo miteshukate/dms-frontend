@@ -33,7 +33,7 @@ A modern, production-ready SaaS Document Management System built with React, Typ
 ## 📁 Project Structure
 
 ```
-vdr-frontend/
+dms-frontend/
 ├── src/
 │   ├── components/
 │   │   ├── dms/                      # DMS-specific components

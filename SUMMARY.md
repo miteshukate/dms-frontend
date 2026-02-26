@@ -515,7 +515,7 @@ pnpm run lint         # Check linting
 
 ### Project URLs
 - Local Dev: http://localhost:5173/
-- Project: /Users/mukate/WebstormProjects/vdr-frontend
+- Project: /Users/mukate/WebstormProjects/dms-frontend
 
 ---
 

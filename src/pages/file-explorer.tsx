@@ -1,14 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from '@/components/ui/breadcrumb';
+import { Badge } from '@/components/ui/badge';
 import { FileTable } from '@/components/dms/file-table';
 import { FileGrid } from '@/components/dms/file-grid';
 import { FileTreeNavigation } from '@/components/dms/file-tree-navigation';
@@ -26,7 +19,10 @@ import {
 } from 'lucide-react';
 import { mockFiles, mockFolders, mockStorageStats } from '@/lib/mock-data';
 import { useNavigate } from 'react-router-dom';
-import { Badge } from '@/components/ui/badge';
+import { FilesApi } from "@/client";
+import type { FileResponse } from "@/client/models";
+import type { FileItem } from "@/lib/types";
+import {getAxiosInstance} from "@/client/axios-setup.ts";
 
 export default function FileExplorer() {
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
@@ -34,10 +30,190 @@ export default function FileExplorer() {
   const [selectedFolder, setSelectedFolder] = useState<string>('root');
   const navigate = useNavigate();
 
-  // Filter files by selected folder
-  const currentFiles = selectedFolder === 'root'
-    ? mockFiles.filter(f => !f.parentId)
-    : mockFiles.filter(f => f.parentId === selectedFolder);
+  // State for current files in selected folder
+  const [currentFiles, setCurrentFiles] = useState<FileItem[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Helper function to convert FileResponse to FileItem format
+  const convertFileResponseToFileItem = (file: FileResponse): FileItem => {
+    // Map file extension to FileType
+    const fileTypeMap: Record<string, FileItem['type']> = {
+      'pdf': 'pdf',
+      'doc': 'doc',
+      'docx': 'docx',
+      'xls': 'xls',
+      'xlsx': 'xlsx',
+      'ppt': 'ppt',
+      'pptx': 'pptx',
+      'txt': 'txt',
+      'csv': 'csv',
+      'jpg': 'jpg',
+      'png': 'png',
+      'gif': 'gif',
+      'zip': 'zip',
+      'folder': 'folder',
+    };
+
+    const fileType = file.extension ? fileTypeMap[file.extension] || 'file' : 'file';
+
+    // Build owner name from UserSummary (firstName + lastName)
+    const ownerName = file.owner?.firstName && file.owner?.lastName
+      ? `${file.owner.firstName} ${file.owner.lastName}`
+      : file.owner?.firstName
+        ? file.owner.firstName
+        : 'Unknown';
+
+    return {
+      id: file.id,
+      name: file.name,
+      type: fileType as FileItem['type'],
+      size: file.size,
+      owner: {
+        id: file.ownerId,
+        name: ownerName,
+        email: file.owner?.email || '',
+        avatar: file.owner?.avatarUrl || undefined,
+        role: 'viewer',
+        team: undefined,
+        lastActive: new Date(),
+        createdAt: new Date(),
+      },
+      createdAt: new Date(file.createdAt),
+      modifiedAt: new Date(file.updatedAt),
+      parentId: file.folderId,
+      isFolder: false,
+      isStarred: false,
+      tags: file.tags || [],
+      version: file.currentVersion || 1,
+      path: file.path || `/${file.name}`,
+    };
+  };
+
+  // Fetch files from API when selectedFolder changes
+  useEffect(() => {
+    const fetchFiles = async () => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        // Get the configured axios instance with debugging
+        const axiosInstance = getAxiosInstance();
+        const fileApi = new FilesApi(undefined, undefined, axiosInstance);
+
+        let apiResponse;
+
+        if (selectedFolder === 'root') {
+          // Get all files - returns AxiosPromise<GetFilesByFolder200Response>
+          console.log('Fetching files from API...');
+          apiResponse = await fileApi.getAllFiles(0, 100, 'createdAt,desc');
+
+          console.log('=== FULL API RESPONSE ===');
+          console.log('apiResponse:', apiResponse);
+          console.log('apiResponse type:', typeof apiResponse);
+          console.log('apiResponse.data:', apiResponse.data);
+          console.log('apiResponse.data type:', typeof apiResponse.data);
+          console.log('apiResponse.data is array?:', Array.isArray(apiResponse.data));
+          console.log('apiResponse.data keys:', apiResponse.data ? Object.keys(apiResponse.data) : 'null');
+          console.log('apiResponse.status:', apiResponse.status);
+          console.log('apiResponse.statusText:', apiResponse.statusText);
+          console.log('apiResponse.headers:', apiResponse.headers);
+          console.log('=== END RESPONSE ===');
+        } else {
+          // TODO: Use getFilesByFolder once API client is regenerated
+          // For now, filter mock data for the selected folder
+          apiResponse = {
+            data: {
+              content: mockFiles.filter(f => f.parentId === selectedFolder),
+            },
+          };
+        }
+
+        // Extract data from AxiosResponse
+        let responseData = apiResponse.data;
+
+        console.log('API Response data:', {
+          type: typeof responseData,
+          isArray: Array.isArray(responseData),
+          keys: typeof responseData === 'object' ? Object.keys(responseData || {}) : 'N/A',
+          sample: Array.isArray(responseData) ? responseData[0] : responseData?.content?.[0],
+        });
+
+        // If data is a string (JSON stringified), parse it
+        if (typeof responseData === 'string') {
+          console.warn('Response was stringified, parsing JSON...');
+          try {
+            responseData = JSON.parse(responseData);
+            console.log('Successfully parsed response:', responseData);
+          } catch (parseError) {
+            console.error('Failed to parse response as JSON:', parseError);
+            throw new Error(`Failed to parse API response: ${parseError}`);
+          }
+        }
+
+        // Handle different response formats from API
+        let files: FileResponse[] = [];
+
+        if (Array.isArray(responseData)) {
+          // Response is an array directly (e.g., [{ id: '...', name: '...' }, ...])
+          console.log('Response is array directly');
+          files = responseData as FileResponse[];
+        } else if (responseData && typeof responseData === 'object' && responseData.content) {
+          // Response is an object with content property (e.g., { content: [...], totalElements: ... })
+          console.log('Response has content property');
+          if (!Array.isArray(responseData.content)) {
+            throw new Error(`Expected content to be an array, got ${typeof responseData.content}`);
+          }
+          files = responseData.content as FileResponse[];
+        } else if (responseData && typeof responseData === 'object') {
+          // Response might be a single object or other structure
+          console.warn('Unexpected response structure:', responseData);
+          setCurrentFiles([]);
+          return;
+        } else {
+          console.error('No valid response data:', responseData);
+          setCurrentFiles([]);
+          return;
+        }
+
+        // Convert FileResponse array to FileItem array
+        console.log(`Converting ${files.length} files from FileResponse to FileItem format`);
+        const convertedFiles = files.map((file: FileResponse | FileItem) => {
+          // If it's already a FileItem (from mock data), return as is
+          if ('type' in file && 'modifiedAt' in file) {
+            return file as FileItem;
+          }
+          // Otherwise convert FileResponse to FileItem
+          return convertFileResponseToFileItem(file as FileResponse);
+        });
+
+        console.log('Successfully converted files:', convertedFiles.length);
+        setCurrentFiles(convertedFiles);
+      } catch (err) {
+        console.error('Failed to fetch files:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Failed to fetch files from API';
+        setError(errorMessage);
+
+        // Fallback to mock data on error
+        console.log('Falling back to mock data...');
+        const mockFallback = mockFiles
+          .filter(f => {
+            if (selectedFolder === 'root') {
+              return !f.parentId;
+            }
+            return f.parentId === selectedFolder;
+          });
+        console.log(`Loaded ${mockFallback.length} files from mock data`);
+        setCurrentFiles(mockFallback);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchFiles().then(() => {
+         console.log('Files loaded for folder:', selectedFolder);
+    });
+  }, [selectedFolder]);
 
   const handleFileAction = (action: string, fileId: string) => {
     console.log('Action:', action, 'File:', fileId);
@@ -68,7 +244,7 @@ export default function FileExplorer() {
   return (
     <div className="space-y-6">
       {/* Breadcrumb */}
-      <Breadcrumb>
+      {/*<Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>
             <BreadcrumbLink href="/files">My Files</BreadcrumbLink>
@@ -84,7 +260,7 @@ export default function FileExplorer() {
             </>
           )}
         </BreadcrumbList>
-      </Breadcrumb>
+      </Breadcrumb>*/}
 
       {/* Main Content */}
       <div className="grid gap-6 lg:grid-cols-[240px_1fr]">
@@ -111,6 +287,15 @@ export default function FileExplorer() {
 
         {/* Main Content Area */}
         <div className="space-y-4">
+          {/* Error Alert */}
+          {error && (
+            <div className="rounded-md bg-red-50 dark:bg-red-950 p-4">
+              <p className="text-sm text-red-800 dark:text-red-200">
+                {error} Displaying mock data instead.
+              </p>
+            </div>
+          )}
+
           {/* Toolbar */}
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-2">
@@ -183,7 +368,20 @@ export default function FileExplorer() {
           </div>
 
           {/* File View */}
-          {viewMode === 'table' ? (
+          {isLoading ? (
+            <Card className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border border-gray-300 border-t-blue-500 mx-auto mb-4"></div>
+                <p className="text-gray-500 dark:text-gray-400">Loading files...</p>
+              </div>
+            </Card>
+          ) : currentFiles.length === 0 ? (
+            <Card className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <p className="text-gray-500 dark:text-gray-400">No files found</p>
+              </div>
+            </Card>
+          ) : viewMode === 'table' ? (
             <FileTable
               files={currentFiles}
               selectedFiles={selectedFiles}
