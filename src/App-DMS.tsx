@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { DMSLayout } from '@/layouts/dms-layout';
+import { SearchProvider } from '@/context/search-context';
 import Dashboard from '@/pages/dashboard';
 import FileExplorer from '@/pages/file-explorer';
 import FilePreview from '@/pages/file-preview';
@@ -14,24 +15,26 @@ import { Toaster } from 'sonner';
 
 export default function App() {
   return (
-    <Router>
-      <DMSLayout>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/files" element={<FileExplorer />} />
-          <Route path="/files/:fileId" element={<FilePreview />} />
-          <Route path="/shared" element={<SharedFiles />} />
-          <Route path="/starred" element={<StarredFiles />} />
-          <Route path="/recent" element={<RecentFiles />} />
-          <Route path="/permissions" element={<PermissionsManagement />} />
-          <Route path="/workflow" element={<WorkflowApproval />} />
-          <Route path="/admin/users" element={<AdminUsers />} />
-          <Route path="/admin/settings" element={<Settings />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </DMSLayout>
-      <Toaster position="bottom-right" />
-    </Router>
+    <SearchProvider>
+      <Router>
+        <DMSLayout>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/files" element={<FileExplorer />} />
+            <Route path="/files/:fileId" element={<FilePreview />} />
+            <Route path="/shared" element={<SharedFiles />} />
+            <Route path="/starred" element={<StarredFiles />} />
+            <Route path="/recent" element={<RecentFiles />} />
+            <Route path="/permissions" element={<PermissionsManagement />} />
+            <Route path="/workflow" element={<WorkflowApproval />} />
+            <Route path="/admin/users" element={<AdminUsers />} />
+            <Route path="/admin/settings" element={<Settings />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </DMSLayout>
+        <Toaster position="bottom-right" />
+      </Router>
+    </SearchProvider>
   );
 }
 

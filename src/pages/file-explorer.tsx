@@ -23,12 +23,14 @@ import { FilesApi } from "@/client";
 import type { FileResponse } from "@/client/models";
 import type { FileItem } from "@/lib/types";
 import {getAxiosInstance} from "@/client/axios-setup.ts";
+import { useSearch } from '@/context/search-context';
 
 export default function FileExplorer() {
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [selectedFolder, setSelectedFolder] = useState<string>('root');
   const navigate = useNavigate();
+  const { searchQuery } = useSearch();
 
   // State for current files in selected folder
   const [currentFiles, setCurrentFiles] = useState<FileItem[]>([]);
@@ -90,7 +92,7 @@ export default function FileExplorer() {
     };
   };
 
-  // Fetch files from API when selectedFolder changes
+  // Fetch files from API when selectedFolder or searchQuery changes
   useEffect(() => {
     const fetchFiles = async () => {
       setIsLoading(true);
@@ -104,9 +106,9 @@ export default function FileExplorer() {
         let apiResponse;
 
         if (selectedFolder === 'root') {
-          // Get all files - returns AxiosPromise<GetFilesByFolder200Response>
-          console.log('Fetching files from API...');
-          apiResponse = await fileApi.getAllFiles(0, 100, 'createdAt,desc');
+          // Get all files - use search parameter if searchQuery exists
+          console.log('Fetching files from API...', searchQuery ? `with search: ${searchQuery}` : '');
+          apiResponse = await fileApi.getAllFiles(0, 100, 'createdAt,desc', undefined, undefined, searchQuery || undefined);
 
           console.log('=== FULL API RESPONSE ===');
           console.log('apiResponse:', apiResponse);
@@ -122,9 +124,18 @@ export default function FileExplorer() {
         } else {
           // TODO: Use getFilesByFolder once API client is regenerated
           // For now, filter mock data for the selected folder
+          const filtered = mockFiles.filter(f => f.parentId === selectedFolder);
+
+          // Apply search filter if searchQuery exists
+          const searchFiltered = searchQuery
+            ? filtered.filter(f =>
+                f.name.toLowerCase().includes(searchQuery.toLowerCase())
+              )
+            : filtered;
+
           apiResponse = {
             data: {
-              content: mockFiles.filter(f => f.parentId === selectedFolder),
+              content: searchFiltered,
             },
           };
         }
@@ -211,9 +222,9 @@ export default function FileExplorer() {
     };
 
     fetchFiles().then(() => {
-         console.log('Files loaded for folder:', selectedFolder);
+         console.log('Files loaded for folder:', selectedFolder, 'with search:', searchQuery);
     });
-  }, [selectedFolder]);
+  }, [selectedFolder, searchQuery]);
 
   const handleFileAction = (action: string, fileId: string) => {
     console.log('Action:', action, 'File:', fileId);

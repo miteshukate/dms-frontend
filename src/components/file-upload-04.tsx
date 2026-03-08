@@ -1,15 +1,18 @@
 "use client";
 
-import { File, FileSpreadsheet, X } from "lucide-react";
+import { File, X } from "lucide-react";
 import { useRef, useState } from "react";
 import type { ChangeEvent, DragEvent } from "react";
 import { toast } from "sonner";
+import type { AxiosProgressEvent } from "axios";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { FilesApi } from "@/client";
+import { getAxiosInstance } from "@/client/axios-setup";
 
-export default function FileUpload04() {
+export default function FileUpload04({ setIsUploadModalOpen }: { setIsUploadModalOpen: (open: boolean) => void }) {
   const [uploadState, setUploadState] = useState<{
     file: File | null;
     progress: number;
@@ -19,36 +22,81 @@ export default function FileUpload04() {
     progress: 0,
     uploading: false,
   });
-  const [showDummy, setShowDummy] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const validFileTypes = [
-    "text/csv",
-    "application/vnd.ms-excel",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  ];
 
   const handleFile = (file: File | undefined) => {
     if (!file) return;
 
-    if (validFileTypes.includes(file.type)) {
-      setUploadState({ file, progress: 0, uploading: true });
+    // Allow any file type - set uploading to false so Upload button can be clicked
+    setUploadState({ file, progress: 0, uploading: false });
+  };
 
-      const interval = setInterval(() => {
-        setUploadState((prev) => {
-          const newProgress = prev.progress + 5;
-          if (newProgress >= 100) {
-            clearInterval(interval);
-            return { ...prev, progress: 100, uploading: false };
+  const uploadFileToAPI = async (file: File) => {
+    try {
+      // Set uploading to true when upload starts
+      setUploadState((prev) => ({
+        ...prev,
+        uploading: true,
+        progress: 0,
+      }));
+
+      const axiosInstance = getAxiosInstance();
+      const fileApi = new FilesApi(undefined, undefined, axiosInstance);
+
+      // Set up progress tracking for the upload
+      const config = {
+        onUploadProgress: (progressEvent: AxiosProgressEvent) => {
+          if (progressEvent.total) {
+            const percentComplete = Math.round(
+              (progressEvent.loaded * 100) / progressEvent.total
+            );
+            setUploadState((prev) => ({
+              ...prev,
+              progress: percentComplete,
+            }));
+            // Once upload is complete, close the modal after a short delay to show 100% progress
+            if (percentComplete === 100) {
+              setTimeout(() => {
+                setIsUploadModalOpen(false);
+              }, 1500);
+            }
           }
-          return { ...prev, progress: newProgress };
-        });
-      }, 200);
-    } else {
-      toast.error("Please upload a CSV, XLSX, or XLS file.", {
+        },
+      };
+
+      console.log("Uploading file:", file.name);
+      const response = await fileApi.uploadFile(
+        file,
+        undefined,
+        undefined,
+        undefined,
+        config
+      );
+
+      console.log("File uploaded successfully:", response.data);
+      toast.success("File uploaded successfully!", {
         position: "bottom-right",
         duration: 3000,
       });
+
+      setUploadState((prev) => ({
+        ...prev,
+        progress: 100,
+        uploading: false,
+      }));
+
+      // Close modal after successful upload
+      setTimeout(() => {
+        setIsUploadModalOpen(false);
+        resetFile();
+      }, 1500);
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      toast.error("Failed to upload file. Please try again.", {
+        position: "bottom-right",
+        duration: 3000,
+      });
+      resetFile();
     }
   };
 
@@ -70,13 +118,8 @@ export default function FileUpload04() {
 
   const getFileIcon = () => {
     if (!uploadState.file) return <File />;
-
-    const fileExt = uploadState.file.name.split(".").pop()?.toLowerCase() || "";
-    return ["csv", "xlsx", "xls"].includes(fileExt) ? (
-      <FileSpreadsheet className="h-5 w-5 text-foreground" />
-    ) : (
-      <File className="h-5 w-5 text-foreground" />
-    );
+    // Return file icon for all file types
+    return <File className="h-5 w-5 text-foreground" />;
   };
 
   const formatFileSize = (bytes: number) => {
@@ -116,7 +159,6 @@ export default function FileUpload04() {
                   name="file-upload-03"
                   type="file"
                   className="sr-only"
-                  accept=".csv, .xlsx, .xls"
                   onChange={handleFileChange}
                   ref={fileInputRef}
                 />
@@ -127,44 +169,10 @@ export default function FileUpload04() {
         </div>
 
         <p className="text-pretty mt-2 text-xs leading-5 text-muted-foreground sm:flex sm:items-center sm:justify-between">
-          <span>Accepted file types: CSV, XLSX or XLS files.</span>
+          <span>Accepted file types: All file types.</span>
           <span className="pl-1 sm:pl-0">Max. size: 10MB</span>
         </p>
 
-        {!file && showDummy && (
-          <Card className="relative mt-8 bg-muted p-4 gap-4">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="absolute right-1 top-1 text-muted-foreground hover:text-foreground"
-              aria-label="Remove"
-              onClick={() => setShowDummy(false)}
-            >
-              <X className="h-5 w-5 shrink-0" aria-hidden={true} />
-            </Button>
-
-            <div className="flex items-center space-x-2.5">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-sm bg-background shadow-sm ring-1 ring-inset ring-border">
-                <FileSpreadsheet
-                  className="h-5 w-5 text-foreground"
-                  aria-hidden={true}
-                />
-              </span>
-              <div>
-                <p className="text-pretty text-xs font-medium text-foreground">
-                  Revenue_Q1_2024.xlsx
-                </p>
-                <p className="text-pretty mt-0.5 text-xs text-muted-foreground">3.1 MB</p>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-3">
-              <Progress value={45} className="h-1.5" />
-              <span className="text-xs text-muted-foreground">45%</span>
-            </div>
-          </Card>
-        )}
 
         {file && (
           <Card className="relative mt-8 bg-muted p-4 gap-4">
@@ -211,9 +219,14 @@ export default function FileUpload04() {
             Cancel
           </Button>
           <Button
-            type="submit"
+            type="button"
             className="whitespace-nowrap"
-            disabled={!file || uploading || progress < 100}
+            disabled={!file || uploading}
+            onClick={() => {
+              if (file && !uploading) {
+                uploadFileToAPI(file);
+              }
+            }}
           >
             Upload
           </Button>

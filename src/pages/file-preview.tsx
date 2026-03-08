@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import {useEffect, useState} from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -37,16 +37,22 @@ import {
   Link as LinkIcon,
   Copy,
 } from 'lucide-react';
-import { mockFiles, mockFileVersions, formatFileSize, formatDate, currentUser } from '@/lib/mock-data';
+import {  mockFileVersions, formatFileSize, formatDate, currentUser } from '@/lib/mock-data';
 import type { FileVersion } from '@/lib/types';
+import {type FileResponse,  FilesApi} from "@/client";
+import {getAxiosInstance} from "@/client/axios-setup.ts";
+import { saveAs } from 'file-saver';
 
 export default function FilePreview() {
   const { fileId } = useParams();
   const navigate = useNavigate();
-  const file = mockFiles.find(f => f.id === fileId);
+  // const file = mockFiles.find(f => f.id === fileId);
   const versions = mockFileVersions[fileId || ''] || [];
   const [showCommentDialog, setShowCommentDialog] = useState(false);
   const [comment, setComment] = useState('');
+  const [fileData, setFileData] = useState<FileResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [fileNotFound, setFileNotFound] = useState(false);
   const [comments, setComments] = useState([
     {
       id: 'c1',
@@ -55,8 +61,57 @@ export default function FilePreview() {
       createdAt: new Date('2026-02-22T15:30:00'),
     },
   ]);
+  useEffect(() => {
+    const handleFile = async () => {
+      try {
+        setIsLoading(true);
+        setFileNotFound(false);
 
-  if (!file) {
+        // Get the configured axios instance with debugging
+        const axiosInstance = getAxiosInstance();
+        const fileApi = new FilesApi(undefined, undefined, axiosInstance);
+
+        // Fetch file by ID
+        console.log('Fetching file from API with ID:', fileId);
+        const apiResponse = await fileApi.getFile(fileId || '');
+
+        if (apiResponse.data) {
+          setFileData(apiResponse.data);
+          console.log('API response data:', apiResponse.data);
+        } else {
+          console.log('No file data returned from API');
+          setFileNotFound(true);
+        }
+      }
+      catch (error) {
+        console.error('Error fetching file:', error);
+        setFileNotFound(true);
+      }
+      finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (fileId) {
+      handleFile();
+    } else {
+      setFileNotFound(true);
+      setIsLoading(false);
+    }
+  }, [fileId]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-200px)]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading file...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (fileNotFound || !fileData) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-200px)]">
         <div className="text-center">
@@ -87,6 +142,28 @@ export default function FilePreview() {
     }
   };
 
+  const handleDownloadFile = async () => {
+    try {
+      const axiosInstance = getAxiosInstance();
+      const fileApi = new FilesApi(undefined, undefined, axiosInstance);
+
+      console.log('Downloading file:', fileId);
+
+      // Configure axios to return blob response
+      const response = await fileApi.downloadFile(fileId || '', undefined, {
+        responseType: 'blob'
+      });
+
+
+      // Create a temporary anchor element and trigger download
+      saveAs(response.data, fileData?.name || 'download');
+
+      console.log('File downloaded successfully');
+    } catch (error) {
+      console.error('Error downloading file:', error);
+    }
+  };
+
   const handleDownloadVersion = (version: FileVersion) => {
     console.log('Downloading version:', version.version);
   };
@@ -101,33 +178,34 @@ export default function FilePreview() {
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-3xl font-bold tracking-tight">{file.name}</h1>
+              <h1 className="text-3xl font-bold tracking-tight">{fileData.name}</h1>
               <Button variant="ghost" size="icon" className="h-8 w-8">
-                <Star className={`h-5 w-5 ${file.isStarred ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+                <Star className="h-5 w-5" />
               </Button>
             </div>
             <div className="flex items-center gap-4 text-sm text-muted-foreground">
               <div className="flex items-center gap-1">
                 <User className="h-4 w-4" />
-                {file.owner.name}
+                {fileData.owner?.firstName || 'Unknown Owner'}
               </div>
               <div className="flex items-center gap-1">
                 <Calendar className="h-4 w-4" />
-                Modified {formatDate(file.modifiedAt)}
+                Modified {fileData.createdAt}
+                {/*Modified {formatDate(fileData.createdAt)}*/}
               </div>
               <div className="flex items-center gap-1">
                 <FileText className="h-4 w-4" />
-                {formatFileSize(file.size)}
+                {formatFileSize(fileData.size)}
               </div>
-              <Badge variant="secondary">Version {file.version}</Badge>
+              <Badge variant="secondary">Version {fileData.currentVersion}</Badge>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={handleDownloadFile}>
               <Download className="h-4 w-4 mr-2" />
               Download
             </Button>
-            <Button variant="outline" size="sm" onClick={() => navigate(`/permissions?fileId=${file.id}`)}>
+            <Button variant="outline" size="sm" onClick={() => navigate(`/permissions?fileId=${fileData.id}`)}>
               <Share2 className="h-4 w-4 mr-2" />
               Share
             </Button>
@@ -171,11 +249,11 @@ export default function FilePreview() {
                 <FileText className="h-16 w-16 text-white" />
               </div>
               <div>
-                <h3 className="text-xl font-semibold mb-2">{file.name}</h3>
+                <h3 className="text-xl font-semibold mb-2">{fileData.name}</h3>
                 <p className="text-muted-foreground">Preview not available</p>
                 <p className="text-sm text-muted-foreground">Click download to view the file</p>
               </div>
-              <Button size="lg">
+              <Button size="lg" onClick={handleDownloadFile}>
                 <Download className="h-5 w-5 mr-2" />
                 Download to View
               </Button>
@@ -193,60 +271,60 @@ export default function FilePreview() {
             <CardContent className="space-y-3 text-sm">
               <div>
                 <p className="text-muted-foreground mb-1">Type</p>
-                <p className="font-medium uppercase">{file.type}</p>
+                <p className="font-medium uppercase">{fileData.mimeType}</p>
               </div>
               <Separator />
               <div>
                 <p className="text-muted-foreground mb-1">Size</p>
-                <p className="font-medium">{formatFileSize(file.size)}</p>
+                <p className="font-medium">{formatFileSize(fileData.size)}</p>
               </div>
               <Separator />
               <div>
                 <p className="text-muted-foreground mb-1">Owner</p>
                 <div className="flex items-center gap-2 mt-1">
                   <Avatar className="h-6 w-6">
-                    <AvatarImage src={file.owner.avatar} />
+                    <AvatarImage src={fileData.owner?.firstName} />
                     <AvatarFallback className="text-xs">
-                      {file.owner.name.split(' ').map(n => n[0]).join('')}
+                      {fileData.owner?.firstName.split(' ').map(n => n[0]).join('')}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="font-medium">{file.owner.name}</span>
+                  <span className="font-medium">{fileData.owner?.firstName}</span>
                 </div>
               </div>
               <Separator />
               <div>
                 <p className="text-muted-foreground mb-1">Created</p>
                 <p className="font-medium">
-                  {file.createdAt.toLocaleDateString('en-US', {
+                 {/* {fileData.createdAt.toLocaleDateString('en-US', {
                     month: 'long',
                     day: 'numeric',
                     year: 'numeric',
-                  })}
+                  })}*/}
                 </p>
               </div>
               <Separator />
               <div>
                 <p className="text-muted-foreground mb-1">Modified</p>
                 <p className="font-medium">
-                  {file.modifiedAt.toLocaleDateString('en-US', {
+                {/*  {fileData.modifiedAt.toLocaleDateString('en-US', {
                     month: 'long',
                     day: 'numeric',
                     year: 'numeric',
-                  })}
+                  })}*/}
                 </p>
               </div>
               <Separator />
               <div>
                 <p className="text-muted-foreground mb-1">Location</p>
-                <p className="font-mono text-xs break-all">{file.path}</p>
+                <p className="font-mono text-xs break-all">{fileData.path}</p>
               </div>
-              {file.tags && file.tags.length > 0 && (
+              {fileData.tags && fileData.tags.length > 0 && (
                 <>
                   <Separator />
                   <div>
                     <p className="text-muted-foreground mb-2">Tags</p>
                     <div className="flex flex-wrap gap-1">
-                      {file.tags.map((tag) => (
+                      {fileData.tags.map((tag) => (
                         <Badge key={tag} variant="secondary" className="text-xs">
                           {tag}
                         </Badge>
