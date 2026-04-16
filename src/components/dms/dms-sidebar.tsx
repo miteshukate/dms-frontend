@@ -1,14 +1,6 @@
 import * as React from "react";
 import {
-  Home,
   FolderOpen,
-  Share2,
-  Clock,
-  Star,
-  Users,
-  Settings,
-  GitBranch,
-  Trash2,
 } from "lucide-react";
 import {
   Sidebar,
@@ -29,54 +21,9 @@ const navigation = [
     title: "Main",
     items: [
       {
-        title: "Dashboard",
-        url: "/",
-        icon: Home,
-      },
-      {
         title: "My Files",
         url: "/files",
         icon: FolderOpen,
-      },
-      {
-        title: "Shared with me",
-        url: "/shared",
-        icon: Share2,
-      },
-      {
-        title: "Recent",
-        url: "/recent",
-        icon: Clock,
-      },
-      {
-        title: "Starred",
-        url: "/starred",
-        icon: Star,
-      },
-    ],
-  },
-  {
-    title: "Workflow",
-    items: [
-      {
-        title: "Approvals",
-        url: "/workflow",
-        icon: GitBranch,
-      },
-    ],
-  },
-  {
-    title: "Administration",
-    items: [
-      {
-        title: "Users & Teams",
-        url: "/admin/users",
-        icon: Users,
-      },
-      {
-        title: "Settings",
-        url: "/admin/settings",
-        icon: Settings,
       },
     ],
   },
@@ -124,8 +71,7 @@ export function DMSSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
       <SidebarFooter className="border-t p-3">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Trash2 className="h-3.5 w-3.5" />
-          <span>Storage: 47.2 GB / 100 GB</span>
+          <span>DocuVault Enterprise DMS</span>
         </div>
       </SidebarFooter>
       <SidebarRail />

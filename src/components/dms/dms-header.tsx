@@ -27,6 +27,8 @@ import {
 import { currentUser, mockNotifications } from '@/lib/mock-data';
 import { formatDate } from '@/lib/mock-data';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/context/use-auth';
+import { toast } from 'sonner';
 
 interface DMSHeaderProps {
   onUploadClick?: () => void;
@@ -37,6 +39,7 @@ export function DMSHeader({ onUploadClick, onSearchSubmit }: DMSHeaderProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [darkMode, setDarkMode] = useState(false);
   const navigate = useNavigate();
+  const { logout, user } = useAuth();
   const unreadCount = mockNotifications.filter(n => !n.read).length;
 
   const toggleDarkMode = () => {
@@ -49,8 +52,27 @@ export function DMSHeader({ onUploadClick, onSearchSubmit }: DMSHeaderProps) {
     onSearchSubmit?.(searchQuery);
   };
 
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast.success('Logged out successfully');
+      navigate('/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+      toast.error('Failed to logout');
+    }
+  };
+
+  // Use authenticated user if available, otherwise fallback to mock user
+  const displayUser = user ? {
+    name: (user as any).name || user.email?.split('@')[0] || 'User',
+    email: user.email || '',
+    avatar: '',
+    role: (user as any).role || 'user',
+  } : currentUser;
+
   return (
-    <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
+    <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-4 border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 px-4">
       <SidebarTrigger />
       <Separator orientation="vertical" className="h-6" />
 
@@ -102,7 +124,7 @@ export function DMSHeader({ onUploadClick, onSearchSubmit }: DMSHeaderProps) {
               )}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <div className="max-h-[400px] overflow-y-auto">
+            <div className="max-h-100 overflow-y-auto">
               {mockNotifications.length === 0 ? (
                 <div className="p-4 text-center text-sm text-muted-foreground">
                   No notifications
@@ -148,9 +170,9 @@ export function DMSHeader({ onUploadClick, onSearchSubmit }: DMSHeaderProps) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-full">
               <Avatar className="h-9 w-9">
-                <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
+                <AvatarImage src={displayUser.avatar} alt={displayUser.name} />
                 <AvatarFallback>
-                  {currentUser.name.split(' ').map(n => n[0]).join('')}
+                  {displayUser.name.split(' ').map((n: string) => n[0]).join('')}
                 </AvatarFallback>
               </Avatar>
             </Button>
@@ -158,10 +180,10 @@ export function DMSHeader({ onUploadClick, onSearchSubmit }: DMSHeaderProps) {
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>
               <div className="flex flex-col gap-1">
-                <p className="text-sm font-medium">{currentUser.name}</p>
-                <p className="text-xs text-muted-foreground">{currentUser.email}</p>
+                <p className="text-sm font-medium">{displayUser.name}</p>
+                <p className="text-xs text-muted-foreground">{displayUser.email}</p>
                 <Badge variant="secondary" className="w-fit text-xs capitalize">
-                  {currentUser.role}
+                  {displayUser.role}
                 </Badge>
               </div>
             </DropdownMenuLabel>
@@ -189,7 +211,10 @@ export function DMSHeader({ onUploadClick, onSearchSubmit }: DMSHeaderProps) {
               )}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive focus:text-destructive">
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive cursor-pointer"
+              onClick={handleLogout}
+            >
               <LogOut className="mr-2 h-4 w-4" />
               Sign out
             </DropdownMenuItem>
